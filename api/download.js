@@ -14,7 +14,9 @@ export default async function handler(req, res) {
   // ==========================================
   if (cleanUrl.includes("tiktok.com")) {
     try {
-      const tikRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}`);
+      const tikRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}`, {
+        signal: AbortSignal.timeout(6000)
+      });
       const data = await tikRes.json();
       if (data.data?.play) {
         const streamUrl = type === "audio_only" ? data.data.music : data.data.play;
@@ -30,7 +32,9 @@ export default async function handler(req, res) {
   if (twitterMatch && twitterMatch[1]) {
     try {
       const tweetId = twitterMatch[1];
-      const twRes = await fetch(`https://api.fxtwitter.com/status/${tweetId}`);
+      const twRes = await fetch(`https://api.fxtwitter.com/status/${tweetId}`, {
+        signal: AbortSignal.timeout(6000)
+      });
       if (twRes.ok) {
         const twData = await twRes.json();
         const media = twData.tweet?.media;
@@ -52,7 +56,8 @@ export default async function handler(req, res) {
         headers: {
           "x-rapidapi-host": "ytstream-download-youtube-videos.p.rapidapi.com",
           "x-rapidapi-key": process.env.RAPIDAPI_KEY
-        }
+        },
+        signal: AbortSignal.timeout(7000)
       });
 
       if (ytRes.ok) {
@@ -67,27 +72,33 @@ export default async function handler(req, res) {
       }
     } catch (e) {}
   }
-// ==========================================
+
+  // ==========================================
   // 4. INSTAGRAM & FACEBOOK
   // ==========================================
   const isMeta = cleanUrl.includes("instagram.com") || cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch");
   if (isMeta) {
+    // Strip tracking parameters (?utm_source=... / &stkn=...)
+    const cleanMetaUrl = cleanUrl.split("?")[0];
+
+    // Primary: RapidAPI Meta Converter
     try {
       const igRes = await fetch(
-        `https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/convert?url=${encodeURIComponent(cleanUrl)}`,
+        `https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/convert?url=${encodeURIComponent(cleanMetaUrl)}`,
         {
           headers: {
             "x-rapidapi-host": "instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com",
             "x-rapidapi-key": process.env.RAPIDAPI_KEY,
             "Content-Type": "application/json"
-          }
+          },
+          signal: AbortSignal.timeout(6000)
         }
       );
 
       if (igRes.ok) {
         const metaData = await igRes.json();
 
-        // Recursively unpack strings out of objects/arrays
+        // Recursively unpack strings out of response objects/arrays
         let extractedUrl = null;
         if (typeof metaData === "string") {
           extractedUrl = metaData;
@@ -107,27 +118,16 @@ export default async function handler(req, res) {
       }
     } catch (e) {}
 
-    // Free Open Fallback
+    // Secondary: Fast Fallback with 4-second cutoff
     try {
-      const fallbackRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanUrl)}`);
+      const fallbackRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanMetaUrl)}`, {
+        signal: AbortSignal.timeout(4000)
+      });
       if (fallbackRes.ok) {
         const fbData = await fallbackRes.json();
         const fUrl = fbData.data?.[0]?.url || fbData.data?.url;
         if (typeof fUrl === "string" && fUrl.startsWith("http")) {
           return res.status(200).json({ download_url: fUrl });
-        }
-      }
-    } catch (e) {}
-  }
-
-    // Backup free scraper
-    try {
-      const fallbackRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanUrl)}`);
-      if (fallbackRes.ok) {
-        const fbData = await fallbackRes.json();
-        const fallbackUrl = fbData.data?.[0]?.url || fbData.data?.url;
-        if (fallbackUrl) {
-          return res.status(200).json({ download_url: fallbackUrl });
         }
       }
     } catch (e) {}
