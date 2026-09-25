@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Allow requests from your frontend
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
 
@@ -7,9 +6,9 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const { query, jobId } = req.query;
+  const { query, jobId, quality = "best", type = "audio_video" } = req.query;
 
-  // Poll existing job if jobId is provided
+  // Check job status
   if (jobId) {
     try {
       const response = await fetch(`https://api.huntapi.com/v1/jobs/${jobId}`, {
@@ -22,13 +21,12 @@ export default async function handler(req, res) {
     }
   }
 
-  // Otherwise initiate new download request
   if (!query) {
     return res.status(400).json({ error: "Missing video link" });
   }
 
   try {
-    const endpoint = `https://api.huntapi.com/v1/video/download?query=${encodeURIComponent(query)}&video_quality=best&video_format=mp4&download_type=audio_video`;
+    const endpoint = `https://api.huntapi.com/v1/video/download?query=${encodeURIComponent(query)}&video_quality=${encodeURIComponent(quality)}&video_format=mp4&download_type=${encodeURIComponent(type)}`;
     
     const response = await fetch(endpoint, {
       method: "GET",
