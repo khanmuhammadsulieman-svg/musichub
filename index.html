@@ -3,151 +3,393 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Universal Video Downloader</title>
+  <title>OmniGrab — Universal Media Downloader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      max-width: 520px;
-      margin: 60px auto;
-      padding: 24px;
-      background: #0f172a;
-      color: #f8fafc;
-      border-radius: 12px;
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(22, 30, 49, 0.75);
+      --border: rgba(255, 255, 255, 0.08);
+      --primary: #38bdf8;
+      --primary-hover: #0ea5e9;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #6366f1;
     }
-    h2 { margin-bottom: 8px; font-size: 1.5rem; text-align: center; }
-    p { color: #94a3b8; font-size: 0.95rem; margin-bottom: 16px; text-align: center; }
-    input {
-      width: 100%;
-      padding: 12px;
-      border-radius: 8px;
-      border: 1px solid #334155;
-      background: #1e293b;
-      color: #fff;
-      font-size: 1rem;
+
+    * {
       box-sizing: border-box;
-      margin-bottom: 12px;
-      outline: none;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
     }
-    button {
+
+    body {
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.12) 0px, transparent 50%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .card {
       width: 100%;
-      padding: 12px;
-      border: none;
-      border-radius: 8px;
-      background: #38bdf8;
-      color: #0f172a;
+      max-width: 580px;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 36px 30px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+
+    .badge-bar {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .platform-badge {
+      font-size: 0.72rem;
       font-weight: 600;
-      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    h1 {
+      font-size: 1.85rem;
+      font-weight: 700;
+      text-align: center;
+      background: linear-gradient(135deg, #ffffff 40%, var(--primary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 26px;
+    }
+
+    .input-wrapper {
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 14px 18px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: #fff;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+    }
+
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .option-group label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    select {
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 0.9rem;
+      outline: none;
       cursor: pointer;
     }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-    #status {
-      margin-top: 18px;
-      font-size: 0.95rem;
-      text-align: center;
-      min-height: 24px;
-      word-break: break-word;
+
+    select:focus {
+      border-color: var(--primary);
     }
-    #status a {
-      color: #38bdf8;
-      font-weight: bold;
-      text-decoration: underline;
+
+    button.btn-primary {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: #0f172a;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: transform 0.15s, opacity 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    button.btn-primary:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+
+    button.btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    #statusArea {
+      margin-top: 24px;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      text-align: center;
+      font-size: 0.92rem;
+    }
+
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .download-card {
+      margin-top: 14px;
+      width: 100%;
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 16px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .download-card a {
+      background: var(--primary);
+      color: #0f172a;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.9rem;
+      padding: 10px 18px;
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+
+    .download-card a:hover {
+      background: var(--primary-hover);
     }
   </style>
 </head>
 <body>
 
-  <h2>Universal Video Downloader</h2>
-  <p>Paste any YouTube, Instagram, TikTok, or X link:</p>
+  <div class="card">
+    <div class="badge-bar">
+      <span class="platform-badge">YouTube</span>
+      <span class="platform-badge">Instagram</span>
+      <span class="platform-badge">TikTok</span>
+      <span class="platform-badge">X (Twitter)</span>
+    </div>
 
-  <input type="text" id="videoUrl" placeholder="https://www.youtube.com/watch?v=..." />
-  <button id="downloadBtn" onclick="downloadVideo()">Get Download Link</button>
+    <h1>OmniGrab</h1>
+    <p class="subtitle">Convert & download media without watermarks</p>
 
-  <div id="status"></div>
+    <div class="input-wrapper">
+      <input type="text" id="videoUrl" placeholder="Paste link here (e.g. YouTube, Reel, TikTok)..." />
+    </div>
+
+    <div class="options-grid">
+      <div class="option-group">
+        <label>Format</label>
+        <select id="downloadType" onchange="toggleQualityOptions()">
+          <option value="audio_video">Video + Audio (MP4)</option>
+          <option value="audio_only">Audio Only (MP3)</option>
+        </select>
+      </div>
+
+      <div class="option-group">
+        <label>Quality / Resolution</label>
+        <select id="videoQuality">
+          <option value="best" selected>Best Available</option>
+          <option value="1080">1080p (Full HD)</option>
+          <option value="720">720p (HD)</option>
+          <option value="480">480p (SD)</option>
+          <option value="360">360p</option>
+        </select>
+      </div>
+    </div>
+
+    <button id="downloadBtn" class="btn-primary" onclick="startDownload()">
+      <span>Download Media</span>
+    </button>
+
+    <div id="statusArea">
+      <div class="spinner" id="spinner"></div>
+      <div id="statusText"></div>
+      <div id="resultContainer" style="width: 100%;"></div>
+    </div>
+  </div>
 
   <script>
-    async function downloadVideo() {
-      const inputUrl = document.getElementById("videoUrl").value.trim();
-      const status = document.getElementById("status");
+    function toggleQualityOptions() {
+      const type = document.getElementById("downloadType").value;
+      const qualitySelect = document.getElementById("videoQuality");
+      qualitySelect.disabled = (type === "audio_only");
+    }
+
+    async function startDownload() {
+      const url = document.getElementById("videoUrl").value.trim();
+      const quality = document.getElementById("videoQuality").value;
+      const type = document.getElementById("downloadType").value;
+
+      const statusArea = document.getElementById("statusArea");
+      const statusText = document.getElementById("statusText");
+      const spinner = document.getElementById("spinner");
+      const resultContainer = document.getElementById("resultContainer");
       const btn = document.getElementById("downloadBtn");
 
-      if (!inputUrl) {
-        status.textContent = "Please enter a valid video link.";
+      if (!url) {
+        alert("Please enter a valid video link.");
         return;
       }
 
       btn.disabled = true;
-      status.textContent = "Starting download job...";
+      statusArea.style.display = "flex";
+      spinner.style.display = "block";
+      resultContainer.innerHTML = "";
+      statusText.textContent = "Connecting to converter...";
 
       try {
-        const response = await fetch(`/api/download?query=${encodeURIComponent(inputUrl)}`);
-        const data = await response.json();
+        const queryParams = new URLSearchParams({ query: url, quality, type });
+        const res = await fetch(`/api/download?${queryParams.toString()}`);
+        const data = await res.json();
 
-        // 1. Check for immediate URL in the initial response
+        // Immediate URL check
         const directUrl = data.download_url || data.url || data.result?.url || data.result?.response;
         if (directUrl) {
-          status.innerHTML = `<a href="${directUrl}" target="_blank" download>Download Video</a>`;
+          showDownloadLink(directUrl, type);
           btn.disabled = false;
           return;
         }
 
         const jobId = data.job_id || data.id;
         if (!jobId) {
-          status.textContent = data.message || data.error || "Unable to start download job. Check your API key or link.";
+          showError(data.message || data.error || "Unable to queue this link. Verify the video is public.");
           btn.disabled = false;
           return;
         }
 
-        status.textContent = `Job started (ID: ${jobId}). Waiting for processing...`;
+        statusText.textContent = "Processing video stream...";
 
-        // 2. Poll job endpoint until ready
         let attempts = 0;
-        const maxAttempts = 30; // 30 * 2.5s = ~75 seconds timeout
+        const maxAttempts = 35; // ~70-80s max
 
-        const pollInterval = setInterval(async () => {
+        const poll = setInterval(async () => {
           attempts++;
           try {
             const jobRes = await fetch(`/api/download?jobId=${jobId}`);
             const job = await jobRes.json();
 
-            // Extract the download URL from whichever key HuntAPI provides
-            const finalUrl =
-              job.result?.response ||
-              job.result?.url ||
-              job.download_url ||
-              job.file_url ||
-              job.url;
-
+            const finalUrl = job.result?.response || job.result?.url || job.download_url || job.file_url || job.url;
             const jobStatus = (job.status || "").toLowerCase();
 
             if (finalUrl || jobStatus === "completed" || jobStatus === "finished" || jobStatus === "completedjob") {
-              clearInterval(pollInterval);
-              const downloadLink = finalUrl || job.result;
-              status.innerHTML = `<a href="${downloadLink}" target="_blank" download>Click Here to Download Your Video</a>`;
+              clearInterval(poll);
+              showDownloadLink(finalUrl || job.result, type);
               btn.disabled = false;
             } else if (jobStatus === "error" || jobStatus === "failed" || jobStatus === "badrequest") {
-              clearInterval(pollInterval);
-              status.textContent = job.error || job.message || "Failed to process video on server.";
+              clearInterval(poll);
+              showError(job.error || job.message || "Failed to process download.");
               btn.disabled = false;
             } else {
-              status.textContent = `Processing video... (Status: ${job.status || "In progress"}, ${attempts * 2}s)`;
+              statusText.textContent = `Processing media... (${attempts * 2}s)`;
             }
 
             if (attempts >= maxAttempts) {
-              clearInterval(pollInterval);
-              status.textContent = "Video processing timed out. Please try again with a shorter video.";
+              clearInterval(poll);
+              showError("Request timed out. Please try again.");
               btn.disabled = false;
             }
           } catch (pollErr) {
-            clearInterval(pollInterval);
-            status.textContent = "Error reading job status from server.";
+            clearInterval(poll);
+            showError("Network interruption while tracking job.");
             btn.disabled = false;
           }
-        }, 2500);
+        }, 2200);
 
       } catch (err) {
-        status.textContent = "Connection error. Please try again.";
+        showError("Failed to communicate with download server.");
         btn.disabled = false;
       }
+    }
+
+    function showDownloadLink(fileUrl, type) {
+      const spinner = document.getElementById("spinner");
+      const statusText = document.getElementById("statusText");
+      const resultContainer = document.getElementById("resultContainer");
+
+      spinner.style.display = "none";
+      statusText.textContent = "Media ready!";
+
+      resultContainer.innerHTML = `
+        <div class="download-card">
+          <div style="text-align: left;">
+            <div style="font-weight: 600; font-size: 0.95rem;">Converted File</div>
+            <div style="font-size: 0.8rem; color: #94a3b8;">${type === 'audio_only' ? 'Audio (MP3)' : 'Video (MP4)'}</div>
+          </div>
+          <a href="${fileUrl}" target="_blank" download>Download</a>
+        </div>
+      `;
+    }
+
+    function showError(message) {
+      const spinner = document.getElementById("spinner");
+      const statusText = document.getElementById("statusText");
+      spinner.style.display = "none";
+      statusText.style.color = "#f87171";
+      statusText.textContent = message;
     }
   </script>
 </body>
