@@ -73,52 +73,56 @@ export default async function handler(req, res) {
     } catch (e) {}
   }
 
-  
-// ==========================================
+  // ==========================================
   // 4. INSTAGRAM & FACEBOOK
   // ==========================================
   const isMeta = cleanUrl.includes("instagram.com") || cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch");
   if (isMeta) {
-    // Normalize URL
-    let cleanMetaUrl = cleanUrl.split("?")[0].replace(/\/+$/, "");
+    // Strip trailing tracking query parameters
+    const cleanMetaUrl = cleanUrl.split("?")[0].replace(/\/+$/, "");
 
-    // Primary: RapidAPI Meta Converter (try POST first, then GET)
     try {
       const igRes = await fetch(
-        `https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/convert?url=${encodeURIComponent(cleanMetaUrl)}`,
+        `https://instagram-downloader-download-instagram-videos-stories1.p.rapidapi.com/?Userinfo=${encodeURIComponent(cleanMetaUrl)}`,
         {
           method: "GET",
           headers: {
-            "x-rapidapi-host": "instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com",
+            "Content-Type": "application/json",
+            "x-rapidapi-host": "instagram-downloader-download-instagram-videos-stories1.p.rapidapi.com",
             "x-rapidapi-key": process.env.RAPIDAPI_KEY
           },
-          signal: AbortSignal.timeout(7000)
+          signal: AbortSignal.timeout(8000)
         }
       );
 
       if (igRes.ok) {
         const metaData = await igRes.json();
-        const mediaUrl =
-          metaData.url?.[0]?.url ||
+
+        // Extract downloadable stream URL from response structures
+        let directUrl =
+          metaData.download_url ||
+          metaData.video_url ||
           metaData.url ||
           metaData.media ||
-          metaData.download_url ||
           metaData.result?.[0]?.url ||
-          (Array.isArray(metaData) ? metaData[0]?.url || metaData[0] : null);
+          metaData.result?.[0]?.download_url ||
+          metaData.data?.[0]?.url ||
+          metaData.data?.video_url ||
+          (Array.isArray(metaData) ? (metaData[0]?.download_url || metaData[0]?.url || metaData[0]) : null);
 
-        if (mediaUrl && typeof mediaUrl === "string" && mediaUrl.startsWith("http")) {
-          return res.status(200).json({ download_url: mediaUrl });
+        if (directUrl && typeof directUrl === "string" && directUrl.startsWith("http")) {
+          return res.status(200).json({ download_url: directUrl });
         }
       }
     } catch (e) {}
 
-    // Secondary: Free Instagram Scraper Endpoint
+    // Backup Free Fallback
     try {
-      const igScraperRes = await fetch(`https://api.vreden.my.id/api/instagram?url=${encodeURIComponent(cleanMetaUrl)}`, {
-        signal: AbortSignal.timeout(6000)
+      const fallbackRes = await fetch(`https://api.vreden.my.id/api/instagram?url=${encodeURIComponent(cleanMetaUrl)}`, {
+        signal: AbortSignal.timeout(5000)
       });
-      if (igScraperRes.ok) {
-        const data = await igScraperRes.json();
+      if (fallbackRes.ok) {
+        const data = await fallbackRes.json();
         const fallbackUrl = data.result?.[0]?.url || data.result?.url || data.result?.video;
         if (fallbackUrl && typeof fallbackUrl === "string" && fallbackUrl.startsWith("http")) {
           return res.status(200).json({ download_url: fallbackUrl });
@@ -126,6 +130,7 @@ export default async function handler(req, res) {
       }
     } catch (e) {}
   }
+
   return res.status(500).json({
     error: "Could not extract media. Ensure the post/account is public and not age-restricted."
   });
