@@ -4,12 +4,25 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  const { query, type = "audio_video" } = req.query;
-  if (!query) return res.status(400).json({ error: "Missing video link" });
+  const { query, jobId, quality = "best", type = "audio_video" } = req.query;
 
+  // 1. Check asynchronous job status for YouTube / heavy video processing
+  if (jobId) {
+    try {
+      const response = await fetch(`https://api.huntapi.com/v1/jobs/${jobId}`, {
+        headers: { "x-api-key": process.env.HUNT_API_KEY }
+      });
+      const data = await response.json();
+      return res.status(200).json(data);
+    } catch (err) {
+      return res.status(500).json({ error: "Failed to check status" });
+    }
+  }
+
+  if (!query) return res.status(400).json({ error: "Missing video link" });
   const cleanUrl = decodeURIComponent(query).trim();
 
-  // 1. FREE ENGINE: TikTok (Instant, No Key, No Watermark)
+  // 2. FAST ENGINE: TikTok (Instant < 1s, 100% Free, No Watermark)
   if (cleanUrl.includes("tiktok.com")) {
     try {
       const tikRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}`);
@@ -21,7 +34,7 @@ export default async function handler(req, res) {
     } catch (e) {}
   }
 
-  // 2. FREE ENGINE: Twitter / X (Instant via FxTwitter API, Zero Cost)
+  // 3. FAST ENGINE: Twitter / X (Instant < 1s, 100% Free)
   const twitterMatch = cleanUrl.match(/(?:twitter\.com|x\.com)\/(?:[^\/]+)\/status\/(\d+)/);
   if (twitterMatch && twitterMatch[1]) {
     try {
@@ -30,59 +43,28 @@ export default async function handler(req, res) {
       if (twRes.ok) {
         const twData = await twRes.json();
         const media = twData.tweet?.media;
-
         if (media?.videos && media.videos.length > 0) {
-          const videoUrl = media.videos[0].url;
-          return res.status(200).json({ download_url: videoUrl });
+          return res.status(200).json({ download_url: media.videos[0].url });
         }
       }
     } catch (e) {}
   }
 
-  // 3. FREE ENGINE: YouTube (Via High-Speed Piped Instances)
-  const ytMatch = cleanUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|v\/|shorts\/))([\w-]{11})/);
-  if (ytMatch && ytMatch[1]) {
-    const videoId = ytMatch[1];
-    const pipedInstances = [
-      "https://pipedapi.kavin.rocks",
-      "https://api.piped.privacydev.net",
-      "https://piped-api.lunar.icu"
-    ];
-
-    for (const host of pipedInstances) {
-      try {
-        const pRes = await fetch(`${host}/streams/${videoId}`, {
-          signal: AbortSignal.timeout(4000)
-        });
-
-        if (pRes.ok) {
-          const pData = await pRes.json();
-
-          if (type === "audio_only") {
-            const audioStream = pData.audioStreams?.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-            if (audioStream?.url) return res.status(200).json({ download_url: audioStream.url });
-          } else {
-            const videoStream = pData.videoStreams?.filter(v => v.videoOnly === false)?.[0] || pData.videoStreams?.[0];
-            if (videoStream?.url) return res.status(200).json({ download_url: videoStream.url });
-          }
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-  }
-
-  // 4. FREE ENGINE: Instagram & Universal Fallback
+  // 4. RELIABLE ENGINE: YouTube & Instagram (Via HuntAPI with your existing key)
   try {
-    const backupRes = await fetch(`https://social-download-all-in-one.p.rapidapi.com/v1/social/autolink?url=${encodeURIComponent(cleanUrl)}`);
-    if (backupRes.ok) {
-      const bData = await backupRes.json();
-      const direct = bData.medias?.[0]?.url || bData.url;
-      if (direct) return res.status(200).json({ download_url: direct });
-    }
-  } catch (e) {}
+    const endpoint = `https://api.huntapi.com/v1/video/download?query=${encodeURIComponent(cleanUrl)}&video_quality=${encodeURIComponent(quality)}&video_format=mp4&download_type=${encodeURIComponent(type)}`;
 
-  return res.status(500).json({
-    error: "Could not fetch stream. Please make sure the video or account is public."
-  });
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        "x-api-key": process.env.HUNT_API_KEY,
+        "Accept": "application/json"
+      }
+    });
+
+    const data = await response.json();
+    return res.status(response.status).json(data);
+  } catch (err) {
+    return res.status(500).json({ error: "Server connection failed" });
+  }
 }
