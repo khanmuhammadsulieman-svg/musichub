@@ -643,7 +643,6 @@
         }
         deferredPrompt = null;
       } else {
-        // iOS or already installed guidance
         alert("To install on iOS: Tap the Safari Share icon and select 'Add to Home Screen'. On Android: Tap Chrome's menu (⋮) and select 'Install app'.");
       }
     }
@@ -719,20 +718,28 @@
             <h4>Ready for Download</h4>
             <span>${label}</span>
           </div>
-          <button class="btn-file-link" onclick="triggerDownload('${fileUrl}', 'media.${extension}')">Download</button>
+          <button class="btn-file-link" onclick="triggerDownload('${encodeURIComponent(fileUrl)}', 'media.${extension}')">Download</button>
         </div>
       `;
     }
 
-    function triggerDownload(url, filename) {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.target = "_blank";
-      a.rel = "noopener noreferrer";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+    function triggerDownload(encodedUrl, filename) {
+      const rawUrl = decodeURIComponent(encodedUrl);
+      const isMetaCdn = rawUrl.includes("cdninstagram") || rawUrl.includes("fbcdn") || rawUrl.includes("instagram.com") || rawUrl.includes("facebook.com");
+
+      // Route Instagram and Facebook media through your backend stream proxy
+      if (isMetaCdn) {
+        window.location.href = `/api/pipe?url=${encodeURIComponent(rawUrl)}&filename=${encodeURIComponent(filename)}`;
+      } else {
+        const a = document.createElement("a");
+        a.href = rawUrl;
+        a.download = filename;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
     }
 
     function showError(message) {
