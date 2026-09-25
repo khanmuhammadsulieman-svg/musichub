@@ -67,7 +67,6 @@ export default async function handler(req, res) {
       }
     } catch (e) {}
   }
-
 // ==========================================
   // 4. INSTAGRAM & FACEBOOK
   // ==========================================
@@ -87,20 +86,39 @@ export default async function handler(req, res) {
 
       if (igRes.ok) {
         const metaData = await igRes.json();
-        // Extract media URL from the convert endpoint response
-        const mediaUrl =
-          metaData.url?.[0]?.url ||
-          metaData.url ||
-          metaData.media ||
-          metaData.download_url ||
-          metaData.result?.[0]?.url ||
-          (Array.isArray(metaData) ? metaData[0]?.url : null);
 
-        if (mediaUrl) {
-          return res.status(200).json({ download_url: mediaUrl });
+        // Recursively unpack strings out of objects/arrays
+        let extractedUrl = null;
+        if (typeof metaData === "string") {
+          extractedUrl = metaData;
+        } else if (Array.isArray(metaData)) {
+          extractedUrl = metaData[0]?.url || metaData[0];
+        } else if (metaData && typeof metaData === "object") {
+          if (Array.isArray(metaData.url)) extractedUrl = metaData.url[0]?.url || metaData.url[0];
+          else if (typeof metaData.url === "string") extractedUrl = metaData.url;
+          else if (typeof metaData.media === "string") extractedUrl = metaData.media;
+          else if (typeof metaData.download_url === "string") extractedUrl = metaData.download_url;
+          else if (Array.isArray(metaData.result)) extractedUrl = metaData.result[0]?.url || metaData.result[0];
+        }
+
+        if (extractedUrl && typeof extractedUrl === "string" && extractedUrl.startsWith("http")) {
+          return res.status(200).json({ download_url: extractedUrl });
         }
       }
     } catch (e) {}
+
+    // Free Open Fallback
+    try {
+      const fallbackRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanUrl)}`);
+      if (fallbackRes.ok) {
+        const fbData = await fallbackRes.json();
+        const fUrl = fbData.data?.[0]?.url || fbData.data?.url;
+        if (typeof fUrl === "string" && fUrl.startsWith("http")) {
+          return res.status(200).json({ download_url: fUrl });
+        }
+      }
+    } catch (e) {}
+  }
 
     // Backup free scraper
     try {
