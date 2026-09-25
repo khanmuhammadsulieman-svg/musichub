@@ -1,0 +1,21 @@
+{
+  "name": "ALL DOWNLOADER",
+  "short_name": "AllDownloader",
+  "description": "Download any video/audio in any format easily and free.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/724/724933.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/724/724933.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
