@@ -14,8 +14,8 @@
       color: #f8fafc;
       border-radius: 12px;
     }
-    h2 { margin-bottom: 8px; font-size: 1.5rem; }
-    p { color: #94a3b8; font-size: 0.95rem; margin-bottom: 16px; }
+    h2 { margin-bottom: 8px; font-size: 1.5rem; text-align: center; }
+    p { color: #94a3b8; font-size: 0.95rem; margin-bottom: 16px; text-align: center; }
     input {
       width: 100%;
       padding: 12px;
@@ -64,8 +64,6 @@
   <div id="status"></div>
 
   <script>
-    const API_KEY = "83ccdd7a-c6e1-4478-b05f-0ac656a719d5";
-
     async function downloadVideo() {
       const inputUrl = document.getElementById("videoUrl").value.trim();
       const status = document.getElementById("status");
@@ -77,23 +75,13 @@
       }
 
       btn.disabled = true;
-      status.textContent = "Requesting download job from HuntAPI...";
+      status.textContent = "Requesting download...";
 
       try {
-        // Step 1: Submit video query to HuntAPI
-        const endpoint = `https://api.huntapi.com/v1/video/download?query=${encodeURIComponent(inputUrl)}&video_quality=best&video_format=mp4&download_type=audio_video`;
-        
-        const response = await fetch(endpoint, {
-          method: "GET",
-          headers: {
-            "x-api-key": API_KEY,
-            "Accept": "application/json"
-          }
-        });
-
+        // Calls your Vercel serverless function (no CORS error, key kept private)
+        const response = await fetch(`/api/download?query=${encodeURIComponent(inputUrl)}`);
         const data = await response.json();
 
-        // Step 2: Handle immediate download link or asynchronous job
         if (data.download_url || data.url) {
           const directUrl = data.download_url || data.url;
           status.innerHTML = `<a href="${directUrl}" target="_blank" download>Download Video</a>`;
@@ -103,18 +91,16 @@
 
         const jobId = data.job_id || data.id;
         if (!jobId) {
-          status.textContent = data.message || "Failed to start download job. Please check the URL.";
+          status.textContent = data.message || "Failed to start download job.";
           btn.disabled = false;
           return;
         }
 
-        // Step 3: Poll the job endpoint until finished
-        status.textContent = "Processing video (this may take a few seconds)...";
+        status.textContent = "Processing video, please wait...";
+
         const pollInterval = setInterval(async () => {
           try {
-            const jobRes = await fetch(`https://api.huntapi.com/v1/jobs/${jobId}`, {
-              headers: { "x-api-key": API_KEY }
-            });
+            const jobRes = await fetch(`/api/download?jobId=${jobId}`);
             const job = await jobRes.json();
 
             if (job.status === "CompletedJob" && (job.result?.response || job.result?.url)) {
@@ -124,12 +110,12 @@
               btn.disabled = false;
             } else if (job.status === "Error" || job.status === "BadRequest") {
               clearInterval(pollInterval);
-              status.textContent = "Error processing video. Check if the video is public.";
+              status.textContent = "Error processing video. Check if the link is public.";
               btn.disabled = false;
             }
           } catch (pollErr) {
             clearInterval(pollInterval);
-            status.textContent = "Error polling video status.";
+            status.textContent = "Error checking status.";
             btn.disabled = false;
           }
         }, 2500);
