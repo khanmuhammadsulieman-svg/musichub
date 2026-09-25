@@ -4,6 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>ALL DOWNLOADER — By sulieman khan</title>
+  
+  <!-- PWA & Mobile App Support -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="AllDownloader">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -76,6 +85,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 12px;
     }
 
     .brand-group {
@@ -102,14 +112,44 @@
       text-decoration-color: #3b82f6;
     }
 
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
     .tag-free {
       background: #ecfdf5;
       color: #059669;
       border: 1px solid #a7f3d0;
-      padding: 5px 12px;
+      padding: 6px 12px;
       border-radius: 9999px;
       font-size: 0.75rem;
       font-weight: 700;
+      white-space: nowrap;
+    }
+
+    /* Install as App Button */
+    .btn-install-app {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #0f172a;
+      color: #ffffff;
+      border: none;
+      padding: 7px 15px;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .btn-install-app:hover {
+      background: #1e293b;
+      transform: translateY(-1px);
     }
 
     /* Hero Section */
@@ -433,6 +473,8 @@
 
     /* Mobile Responsive */
     @media (max-width: 640px) {
+      .navbar { padding: 16px; }
+      .tag-free { display: none; }
       .hero-title { font-size: 1.95rem; }
       .hero-desc { font-size: 0.95rem; }
       .converter-card { padding: 18px 14px; }
@@ -458,13 +500,19 @@
     <div class="blob-2"></div>
   </div>
 
-  <!-- Navigation Bar -->
+  <!-- Navigation Bar with Install App Action -->
   <nav class="navbar">
     <div class="brand-group">
       <span class="nav-logo">ALL DOWNLOADER</span>
       <span class="nav-author">By sulieman khan</span>
     </div>
-    <span class="tag-free">100% Free & Unlimited</span>
+    <div class="nav-actions">
+      <span class="tag-free">100% Free & Unlimited</span>
+      <button id="installAppBtn" class="btn-install-app" onclick="installPWA()">
+        <span>📲</span>
+        <span>Install App</span>
+      </button>
+    </div>
   </nav>
 
   <!-- Hero & Main Converter Area -->
@@ -565,8 +613,8 @@
     </div>
     <div class="feature-card">
       <span class="feat-icon">📱</span>
-      <h3>100% Mobile Ready</h3>
-      <p>Optimized for iPhone, iPad, and Android browser downloads without installing external apps.</p>
+      <h3>Install as Mobile App</h3>
+      <p>Save ALL DOWNLOADER directly on your iPhone or Android home screen for instant one-tap access.</p>
     </div>
   </section>
 
@@ -576,6 +624,37 @@
   </footer>
 
   <script>
+    // --- PWA Installation Logic ---
+    let deferredPrompt = null;
+    const installBtn = document.getElementById("installAppBtn");
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.style.display = "inline-flex";
+    });
+
+    async function installPWA() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === "accepted") {
+          installBtn.style.display = "none";
+        }
+        deferredPrompt = null;
+      } else {
+        // iOS or already installed guidance
+        alert("To install on iOS: Tap the Safari Share icon and select 'Add to Home Screen'. On Android: Tap Chrome's menu (⋮) and select 'Install app'.");
+      }
+    }
+
+    // Register Service Worker
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      });
+    }
+
     function toggleQualityOptions() {
       const type = document.getElementById("downloadType").value;
       const qualitySelect = document.getElementById("videoQuality");
