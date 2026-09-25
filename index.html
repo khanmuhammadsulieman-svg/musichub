@@ -34,6 +34,7 @@
       display: flex;
       flex-direction: column;
       overflow-x: hidden;
+      position: relative;
     }
 
     /* Ambient Background Glow */
@@ -151,7 +152,7 @@
     }
 
     .hero-desc {
-      font-size: 1.15rem;
+      font-size: 1.12rem;
       font-weight: 500;
       color: var(--text-muted);
       max-width: 580px;
@@ -159,12 +160,12 @@
       line-height: 1.5;
     }
 
-    /* Converter Card (Responsive Full Width) */
+    /* Downloader Card */
     .converter-card {
       background: #ffffff;
       border: 1.5px solid var(--border);
       border-radius: 20px;
-      padding: 24px;
+      padding: 26px;
       box-shadow: 0 16px 36px -10px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(0, 0, 0, 0.02);
       text-align: left;
     }
@@ -302,8 +303,8 @@
     }
 
     .spinner {
-      width: 34px;
-      height: 34px;
+      width: 32px;
+      height: 32px;
       border: 3.5px solid #e2e8f0;
       border-top-color: var(--primary);
       border-radius: 50%;
@@ -360,9 +361,16 @@
       border-radius: 10px;
       box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
       white-space: nowrap;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s;
     }
 
-    /* Feature Highlights Section */
+    .btn-file-link:hover {
+      background: #15803d;
+    }
+
+    /* Features Section */
     .features-section {
       width: 100%;
       max-width: 900px;
@@ -423,20 +431,12 @@
       50% { transform: scale(1.25); }
     }
 
-    /* Mobile Adaptations */
+    /* Mobile Responsive */
     @media (max-width: 640px) {
-      .hero-title {
-        font-size: 1.95rem;
-      }
-      .hero-desc {
-        font-size: 0.95rem;
-      }
-      .converter-card {
-        padding: 18px 14px;
-      }
-      .controls-grid {
-        grid-template-columns: 1fr;
-      }
+      .hero-title { font-size: 1.95rem; }
+      .hero-desc { font-size: 0.95rem; }
+      .converter-card { padding: 18px 14px; }
+      .controls-grid { grid-template-columns: 1fr; }
       .download-result {
         flex-direction: column;
         align-items: stretch;
@@ -446,21 +446,19 @@
         text-align: center;
         margin-bottom: 8px;
       }
-      .btn-file-link {
-        text-align: center;
-      }
+      .btn-file-link { text-align: center; width: 100%; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Ambient Light Effects -->
+  <!-- Background Glows -->
   <div class="bg-blobs">
     <div class="blob-1"></div>
     <div class="blob-2"></div>
   </div>
 
-  <!-- Header / Navigation Bar -->
+  <!-- Navigation Bar -->
   <nav class="navbar">
     <div class="brand-group">
       <span class="nav-logo">ALL DOWNLOADER</span>
@@ -477,10 +475,10 @@
       Download any video/audio in any format easily and free. Supports high-resolution MP4 video and 320kbps MP3 audio with no watermarks or registrations.
     </p>
 
-    <!-- Interactive Downloader Tool -->
+    <!-- Downloader Box -->
     <div class="converter-card">
       
-      <!-- Real Platform SVGs -->
+      <!-- Platform SVGs -->
       <div class="platform-row">
         <div class="platform-badge badge-yt">
           <svg viewBox="0 0 24 24" fill="currentColor">
@@ -511,12 +509,12 @@
         </div>
       </div>
 
-      <!-- Link Input Field -->
+      <!-- Input Field -->
       <div class="input-group">
         <input type="text" id="videoUrl" class="main-input" placeholder="Paste link from YouTube, Instagram, TikTok, or X..." />
       </div>
 
-      <!-- Controls: Format & Resolution -->
+      <!-- Format & Quality Options -->
       <div class="controls-grid">
         <div class="control-box">
           <label>Format</label>
@@ -538,12 +536,12 @@
         </div>
       </div>
 
-      <!-- Submit Button -->
+      <!-- Action Button -->
       <button id="downloadBtn" class="btn-download" onclick="startDownload()">
         <span>Download Media</span>
       </button>
 
-      <!-- Processing & Result Area -->
+      <!-- Status & Result Area -->
       <div id="statusArea">
         <div class="spinner" id="spinner"></div>
         <div id="statusText">Connecting...</div>
@@ -553,7 +551,7 @@
     </div>
   </main>
 
-  <!-- Feature Highlights -->
+  <!-- Feature Cards -->
   <section class="features-section">
     <div class="feature-card">
       <span class="feat-icon">🚀</span>
@@ -572,7 +570,7 @@
     </div>
   </section>
 
-  <!-- Footer Credits -->
+  <!-- Footer -->
   <footer>
     Created with <span class="heart-icon">❤️</span> by Muhammad sulieman khan
   </footer>
@@ -604,69 +602,22 @@
       statusArea.style.display = "flex";
       spinner.style.display = "block";
       resultContainer.innerHTML = "";
-      statusText.style.color = "#64748b";
-      statusText.textContent = "Connecting to converter...";
+      statusText.style.color = "#2563eb";
+      statusText.textContent = "Fetching high-speed stream...";
 
       try {
         const queryParams = new URLSearchParams({ query: url, quality, type });
         const res = await fetch(`/api/download?${queryParams.toString()}`);
         const data = await res.json();
 
-        // Immediate direct download url
-        const directUrl = data.download_url || data.url || data.result?.url || data.result?.response;
-        if (directUrl) {
-          showDownloadLink(directUrl, type);
-          btn.disabled = false;
-          return;
+        if (data.download_url) {
+          showDownloadLink(data.download_url, type);
+        } else {
+          showError(data.error || "Unable to extract media from this link.");
         }
-
-        const jobId = data.job_id || data.id;
-        if (!jobId) {
-          showError(data.message || data.error || "Unable to process this link. Please check if it's public.");
-          btn.disabled = false;
-          return;
-        }
-
-        statusText.textContent = "Processing video stream...";
-
-        let attempts = 0;
-        const maxAttempts = 35; // ~75 seconds timeout
-
-        const poll = setInterval(async () => {
-          attempts++;
-          try {
-            const jobRes = await fetch(`/api/download?jobId=${jobId}`);
-            const job = await jobRes.json();
-
-            const finalUrl = job.result?.response || job.result?.url || job.download_url || job.file_url || job.url;
-            const jobStatus = (job.status || "").toLowerCase();
-
-            if (finalUrl || jobStatus === "completed" || jobStatus === "finished" || jobStatus === "completedjob") {
-              clearInterval(poll);
-              showDownloadLink(finalUrl || job.result, type);
-              btn.disabled = false;
-            } else if (jobStatus === "error" || jobStatus === "failed" || jobStatus === "badrequest") {
-              clearInterval(poll);
-              showError(job.error || job.message || "Failed to process video on server.");
-              btn.disabled = false;
-            } else {
-              statusText.textContent = `Processing media... (${attempts * 2}s)`;
-            }
-
-            if (attempts >= maxAttempts) {
-              clearInterval(poll);
-              showError("Request timed out. Please try again with a shorter video.");
-              btn.disabled = false;
-            }
-          } catch (pollErr) {
-            clearInterval(poll);
-            showError("Network interruption while tracking job.");
-            btn.disabled = false;
-          }
-        }, 2200);
-
       } catch (err) {
-        showError("Failed to communicate with download server.");
+        showError("Connection failed. Please try again.");
+      } finally {
         btn.disabled = false;
       }
     }
@@ -680,15 +631,29 @@
       statusText.textContent = "Your media is ready!";
       statusText.style.color = "#16a34a";
 
+      const extension = type === "audio_only" ? "mp3" : "mp4";
+      const label = type === "audio_only" ? "Audio (MP3)" : "Video (MP4)";
+
       resultContainer.innerHTML = `
         <div class="download-result">
           <div class="download-details">
             <h4>Ready for Download</h4>
-            <span>${type === 'audio_only' ? 'Audio (MP3)' : 'Video (MP4)'}</span>
+            <span>${label}</span>
           </div>
-          <a href="${fileUrl}" class="btn-file-link" target="_blank" download>Download</a>
+          <button class="btn-file-link" onclick="triggerDownload('${fileUrl}', 'media.${extension}')">Download</button>
         </div>
       `;
+    }
+
+    function triggerDownload(url, filename) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     function showError(message) {
