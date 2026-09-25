@@ -1,44 +1,45 @@
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  const { query, jobId, quality = "best", type = "audio_video" } = req.query;
-
-  // Check job status
-  if (jobId) {
-    try {
-      const response = await fetch(`https://api.huntapi.com/v1/jobs/${jobId}`, {
-        headers: { "x-api-key": process.env.HUNT_API_KEY }
-      });
-      const data = await response.json();
-      return res.status(200).json(data);
-    } catch (err) {
-      return res.status(500).json({ error: "Failed to check job status" });
-    }
-  }
+  const { query, quality = "1080", type = "audio_video" } = req.query;
 
   if (!query) {
     return res.status(400).json({ error: "Missing video link" });
   }
 
   try {
-    const endpoint = `https://api.huntapi.com/v1/video/download?query=${encodeURIComponent(query)}&video_quality=${encodeURIComponent(quality)}&video_format=mp4&download_type=${encodeURIComponent(type)}`;
-    
-    const response = await fetch(endpoint, {
-      method: "GET",
+    // Cobalt processes synchronously: NO queues, NO polling, returns direct URL immediately
+    const cobaltRes = await fetch("https://api.cobalt.tools/", {
+      method: "POST",
       headers: {
-        "x-api-key": process.env.HUNT_API_KEY,
-        "Accept": "application/json"
-      }
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        url: query,
+        videoQuality: quality === "best" ? "max" : quality,
+        downloadMode: type === "audio_only" ? "audio" : "auto",
+        youtubeVideoCodec: "h264"
+      })
     });
 
-    const data = await response.json();
-    return res.status(response.status).json(data);
+    const data = await cobaltRes.json();
+
+    if (data.url) {
+      return res.status(200).json({ download_url: data.url });
+    }
+
+    if (data.text) {
+      return res.status(400).json({ error: data.text });
+    }
+
+    return res.status(500).json({ error: "Failed to extract direct media link." });
   } catch (err) {
-    return res.status(500).json({ error: "Server connection failed" });
+    return res.status(500).json({ error: "Upstream service error. Please try again." });
   }
 }
