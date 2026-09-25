@@ -73,66 +73,59 @@ export default async function handler(req, res) {
     } catch (e) {}
   }
 
-  // ==========================================
+  
+// ==========================================
   // 4. INSTAGRAM & FACEBOOK
   // ==========================================
   const isMeta = cleanUrl.includes("instagram.com") || cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch");
   if (isMeta) {
-    // Strip tracking parameters (?utm_source=... / &stkn=...)
-    const cleanMetaUrl = cleanUrl.split("?")[0];
+    // Normalize URL
+    let cleanMetaUrl = cleanUrl.split("?")[0].replace(/\/+$/, "");
 
-    // Primary: RapidAPI Meta Converter
+    // Primary: RapidAPI Meta Converter (try POST first, then GET)
     try {
       const igRes = await fetch(
         `https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/convert?url=${encodeURIComponent(cleanMetaUrl)}`,
         {
+          method: "GET",
           headers: {
             "x-rapidapi-host": "instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com",
-            "x-rapidapi-key": process.env.RAPIDAPI_KEY,
-            "Content-Type": "application/json"
+            "x-rapidapi-key": process.env.RAPIDAPI_KEY
           },
-          signal: AbortSignal.timeout(6000)
+          signal: AbortSignal.timeout(7000)
         }
       );
 
       if (igRes.ok) {
         const metaData = await igRes.json();
+        const mediaUrl =
+          metaData.url?.[0]?.url ||
+          metaData.url ||
+          metaData.media ||
+          metaData.download_url ||
+          metaData.result?.[0]?.url ||
+          (Array.isArray(metaData) ? metaData[0]?.url || metaData[0] : null);
 
-        // Recursively unpack strings out of response objects/arrays
-        let extractedUrl = null;
-        if (typeof metaData === "string") {
-          extractedUrl = metaData;
-        } else if (Array.isArray(metaData)) {
-          extractedUrl = metaData[0]?.url || metaData[0];
-        } else if (metaData && typeof metaData === "object") {
-          if (Array.isArray(metaData.url)) extractedUrl = metaData.url[0]?.url || metaData.url[0];
-          else if (typeof metaData.url === "string") extractedUrl = metaData.url;
-          else if (typeof metaData.media === "string") extractedUrl = metaData.media;
-          else if (typeof metaData.download_url === "string") extractedUrl = metaData.download_url;
-          else if (Array.isArray(metaData.result)) extractedUrl = metaData.result[0]?.url || metaData.result[0];
-        }
-
-        if (extractedUrl && typeof extractedUrl === "string" && extractedUrl.startsWith("http")) {
-          return res.status(200).json({ download_url: extractedUrl });
+        if (mediaUrl && typeof mediaUrl === "string" && mediaUrl.startsWith("http")) {
+          return res.status(200).json({ download_url: mediaUrl });
         }
       }
     } catch (e) {}
 
-    // Secondary: Fast Fallback with 4-second cutoff
+    // Secondary: Free Instagram Scraper Endpoint
     try {
-      const fallbackRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanMetaUrl)}`, {
-        signal: AbortSignal.timeout(4000)
+      const igScraperRes = await fetch(`https://api.vreden.my.id/api/instagram?url=${encodeURIComponent(cleanMetaUrl)}`, {
+        signal: AbortSignal.timeout(6000)
       });
-      if (fallbackRes.ok) {
-        const fbData = await fallbackRes.json();
-        const fUrl = fbData.data?.[0]?.url || fbData.data?.url;
-        if (typeof fUrl === "string" && fUrl.startsWith("http")) {
-          return res.status(200).json({ download_url: fUrl });
+      if (igScraperRes.ok) {
+        const data = await igScraperRes.json();
+        const fallbackUrl = data.result?.[0]?.url || data.result?.url || data.result?.video;
+        if (fallbackUrl && typeof fallbackUrl === "string" && fallbackUrl.startsWith("http")) {
+          return res.status(200).json({ download_url: fallbackUrl });
         }
       }
     } catch (e) {}
   }
-
   return res.status(500).json({
     error: "Could not extract media. Ensure the post/account is public and not age-restricted."
   });
