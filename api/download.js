@@ -78,54 +78,41 @@ export default async function handler(req, res) {
   // ==========================================
   const isMeta = cleanUrl.includes("instagram.com") || cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch");
   if (isMeta) {
-    // Strip trailing tracking query parameters
     const cleanMetaUrl = cleanUrl.split("?")[0].replace(/\/+$/, "");
 
+    // Engine A: Fast Direct Media Scraper
     try {
-      const igRes = await fetch(
-        `https://instagram-downloader-download-instagram-videos-stories1.p.rapidapi.com/?Userinfo=${encodeURIComponent(cleanMetaUrl)}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "x-rapidapi-host": "instagram-downloader-download-instagram-videos-stories1.p.rapidapi.com",
-            "x-rapidapi-key": process.env.RAPIDAPI_KEY
-          },
-          signal: AbortSignal.timeout(8000)
-        }
-      );
-
+      const igRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanMetaUrl)}`, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        signal: AbortSignal.timeout(6000)
+      });
       if (igRes.ok) {
-        const metaData = await igRes.json();
-
-        // Extract downloadable stream URL from response structures
-        let directUrl =
-          metaData.download_url ||
-          metaData.video_url ||
-          metaData.url ||
-          metaData.media ||
-          metaData.result?.[0]?.url ||
-          metaData.result?.[0]?.download_url ||
-          metaData.data?.[0]?.url ||
-          metaData.data?.video_url ||
-          (Array.isArray(metaData) ? (metaData[0]?.download_url || metaData[0]?.url || metaData[0]) : null);
-
+        const fbData = await igRes.json();
+        const directUrl = fbData.data?.[0]?.url || fbData.data?.url;
         if (directUrl && typeof directUrl === "string" && directUrl.startsWith("http")) {
           return res.status(200).json({ download_url: directUrl });
         }
       }
     } catch (e) {}
 
-    // Backup Free Fallback
+    // Engine B: SnapInsta Engine
     try {
-      const fallbackRes = await fetch(`https://api.vreden.my.id/api/instagram?url=${encodeURIComponent(cleanMetaUrl)}`, {
-        signal: AbortSignal.timeout(5000)
+      const snapRes = await fetch("https://snapinsta.app/action.php", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Referer": "https://snapinsta.app/",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        },
+        body: new URLSearchParams({ url: cleanMetaUrl, action: "post" }),
+        signal: AbortSignal.timeout(6000)
       });
-      if (fallbackRes.ok) {
-        const data = await fallbackRes.json();
-        const fallbackUrl = data.result?.[0]?.url || data.result?.url || data.result?.video;
-        if (fallbackUrl && typeof fallbackUrl === "string" && fallbackUrl.startsWith("http")) {
-          return res.status(200).json({ download_url: fallbackUrl });
+
+      if (snapRes.ok) {
+        const html = await snapRes.text();
+        const match = html.match(/href="([^"]+token=[^"]+)"/i) || html.match(/href="(https:\/\/[^"]+download[^"]*)"/i);
+        if (match && match[1]) {
+          return res.status(200).json({ download_url: match[1].replace(/&amp;/g, "&") });
         }
       }
     } catch (e) {}
