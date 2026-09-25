@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Universal Video Downloader</title>
+  <style>
+    body { font-family: sans-serif; max-width: 500px; margin: 50px auto; padding: 20px; }
+    input { width: 100%; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
+    button { padding: 10px 20px; cursor: pointer; }
+    #status { margin-top: 15px; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <h2>Universal Video Downloader</h2>
+  <p>Paste any YouTube, Instagram, TikTok, or Twitter link:</p>
+
+  <input type="text" id="videoUrl" placeholder="https://www.instagram.com/reel/..." />
+  <button onclick="downloadVideo()">Get Download Link</button>
+
+  <div id="status"></div>
+
+  <script>
+    async function downloadVideo() {
+      const inputUrl = document.getElementById("videoUrl").value.trim();
+      const status = document.getElementById("status");
+
+      if (!inputUrl) {
+        status.textContent = "Please enter a URL first.";
+        return;
+      }
+
+      status.textContent = "Fetching download link...";
+
+      try {
+        const response = await fetch("https://api.cobalt.tools/", {
+          method: "POST",
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            url: inputUrl
+          })
+        });
+
+        const data = await response.json();
+
+        // Cobalt provides the direct file under data.url
+        if (data.url) {
+          status.innerHTML = `<a href="${data.url}" target="_blank" download>Click here to download your file</a>`;
+        } else {
+          status.textContent = "Failed to get download link. Check if the link is public.";
+        }
+      } catch (err) {
+        status.textContent = "Error connecting to the API.";
+      }
+    }
+  </script>
+</body>
+</html>
