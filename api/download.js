@@ -4,25 +4,12 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  const { query, jobId, quality = "best", type = "audio_video" } = req.query;
-
-  // 1. Check asynchronous job status for YouTube / heavy video processing
-  if (jobId) {
-    try {
-      const response = await fetch(`https://api.huntapi.com/v1/jobs/${jobId}`, {
-        headers: { "x-api-key": process.env.HUNT_API_KEY }
-      });
-      const data = await response.json();
-      return res.status(200).json(data);
-    } catch (err) {
-      return res.status(500).json({ error: "Failed to check status" });
-    }
-  }
-
+  const { query, type = "audio_video" } = req.query;
   if (!query) return res.status(400).json({ error: "Missing video link" });
+
   const cleanUrl = decodeURIComponent(query).trim();
 
-  // 2. FAST ENGINE: TikTok (Instant < 1s, 100% Free, No Watermark)
+  // 1. FAST ENGINE: TikTok (Instant < 1s, Free, No Watermark)
   if (cleanUrl.includes("tiktok.com")) {
     try {
       const tikRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}`);
@@ -34,7 +21,7 @@ export default async function handler(req, res) {
     } catch (e) {}
   }
 
-  // 3. FAST ENGINE: Twitter / X (Instant < 1s, 100% Free)
+  // 2. FAST ENGINE: Twitter / X (Instant < 1s, Free)
   const twitterMatch = cleanUrl.match(/(?:twitter\.com|x\.com)\/(?:[^\/]+)\/status\/(\d+)/);
   if (twitterMatch && twitterMatch[1]) {
     try {
@@ -50,21 +37,49 @@ export default async function handler(req, res) {
     } catch (e) {}
   }
 
-  // 4. RELIABLE ENGINE: YouTube & Instagram (Via HuntAPI with your existing key)
-  try {
-    const endpoint = `https://api.huntapi.com/v1/video/download?query=${encodeURIComponent(cleanUrl)}&video_quality=${encodeURIComponent(quality)}&video_format=mp4&download_type=${encodeURIComponent(type)}`;
+  // 3. FAST ENGINE: YouTube via RapidAPI YTStream (Direct Google CDN, No Queuing)
+  const ytMatch = cleanUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|v\/|shorts\/))([\w-]{11})/);
+  if (ytMatch && ytMatch[1]) {
+    try {
+      const videoId = ytMatch[1];
+      const ytRes = await fetch(`https://ytstream-download-youtube-videos.p.rapidapi.com/dl?id=${videoId}`, {
+        headers: {
+          "x-rapidapi-host": "ytstream-download-youtube-videos.p.rapidapi.com",
+          "x-rapidapi-key": process.env.RAPIDAPI_KEY
+        }
+      });
 
-    const response = await fetch(endpoint, {
-      method: "GET",
-      headers: {
-        "x-api-key": process.env.HUNT_API_KEY,
-        "Accept": "application/json"
+      if (ytRes.ok) {
+        const data = await ytRes.json();
+        
+        if (type === "audio_only") {
+          const audioFormats = data.adaptiveFormats?.filter(f => f.mimeType?.includes("audio")) || [];
+          audioFormats.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+          if (audioFormats[0]?.url) {
+            return res.status(200).json({ download_url: audioFormats[0].url });
+          }
+        }
+
+        // Direct playable/downloadable video stream
+        const directVideo = data.formats?.[0]?.url || data.adaptiveFormats?.[0]?.url;
+        if (directVideo) {
+          return res.status(200).json({ download_url: directVideo });
+        }
       }
-    });
-
-    const data = await response.json();
-    return res.status(response.status).json(data);
-  } catch (err) {
-    return res.status(500).json({ error: "Server connection failed" });
+    } catch (e) {}
   }
+
+  // 4. INSTANT FALLBACK: Invidious Stream Resolver
+  if (ytMatch && ytMatch[1]) {
+    try {
+      const invRes = await fetch(`https://inv.tux.pizza/api/v1/videos/${ytMatch[1]}`);
+      if (invRes.ok) {
+        const invData = await invRes.json();
+        const format = invData.formatStreams?.reverse()?.[0]?.url || invData.adaptiveFormats?.find(f => f.type?.startsWith("audio/"))?.url;
+        if (format) return res.status(200).json({ download_url: format });
+      }
+    } catch (e) {}
+  }
+
+  return res.status(500).json({ error: "Unable to process video. Verify the URL is public." });
 }
