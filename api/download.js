@@ -5,11 +5,13 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
 
   const { query, type = "audio_video" } = req.query;
-  if (!query) return res.status(400).json({ error: "Missing video link" });
+  if (!query) return res.status(400).json({ error: "Missing media link" });
 
   const cleanUrl = decodeURIComponent(query).trim();
 
-  // 1. FAST ENGINE: TikTok (Instant < 1s, Free, No Watermark)
+  // ==========================================
+  // 1. TIKTOK (Instant, Free, No Watermark)
+  // ==========================================
   if (cleanUrl.includes("tiktok.com")) {
     try {
       const tikRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}`);
@@ -21,7 +23,9 @@ export default async function handler(req, res) {
     } catch (e) {}
   }
 
-  // 2. FAST ENGINE: Twitter / X (Instant < 1s, Free)
+  // ==========================================
+  // 2. TWITTER / X (Instant via FxTwitter)
+  // ==========================================
   const twitterMatch = cleanUrl.match(/(?:twitter\.com|x\.com)\/(?:[^\/]+)\/status\/(\d+)/);
   if (twitterMatch && twitterMatch[1]) {
     try {
@@ -37,7 +41,9 @@ export default async function handler(req, res) {
     } catch (e) {}
   }
 
-  // 3. FAST ENGINE: YouTube via RapidAPI YTStream (Direct Google CDN, No Queuing)
+  // ==========================================
+  // 3. YOUTUBE (Via RapidAPI YTStream)
+  // ==========================================
   const ytMatch = cleanUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|v\/|shorts\/))([\w-]{11})/);
   if (ytMatch && ytMatch[1]) {
     try {
@@ -51,35 +57,60 @@ export default async function handler(req, res) {
 
       if (ytRes.ok) {
         const data = await ytRes.json();
-        
         if (type === "audio_only") {
           const audioFormats = data.adaptiveFormats?.filter(f => f.mimeType?.includes("audio")) || [];
           audioFormats.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-          if (audioFormats[0]?.url) {
-            return res.status(200).json({ download_url: audioFormats[0].url });
-          }
+          if (audioFormats[0]?.url) return res.status(200).json({ download_url: audioFormats[0].url });
         }
-
-        // Direct playable/downloadable video stream
         const directVideo = data.formats?.[0]?.url || data.adaptiveFormats?.[0]?.url;
-        if (directVideo) {
-          return res.status(200).json({ download_url: directVideo });
+        if (directVideo) return res.status(200).json({ download_url: directVideo });
+      }
+    } catch (e) {}
+  }
+
+  // ==========================================
+  // 4. INSTAGRAM & FACEBOOK (Dedicated RapidAPI Extraction)
+  // ==========================================
+  const isMeta = cleanUrl.includes("instagram.com") || cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch");
+  if (isMeta) {
+    // Primary RapidAPI resolver for IG / FB
+    try {
+      const igRes = await fetch(`https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/index?url=${encodeURIComponent(cleanUrl)}`, {
+        headers: {
+          "x-rapidapi-host": "instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com",
+          "x-rapidapi-key": process.env.RAPIDAPI_KEY
+        }
+      });
+
+      if (igRes.ok) {
+        const metaData = await igRes.json();
+        const mediaUrl =
+          metaData.media ||
+          metaData.url ||
+          metaData.download_url ||
+          metaData.result?.[0]?.url ||
+          metaData[0]?.url;
+
+        if (mediaUrl) {
+          return res.status(200).json({ download_url: mediaUrl });
+        }
+      }
+    } catch (e) {}
+
+    // Free Open Fallback for Instagram & Facebook
+    try {
+      const fallbackRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanUrl)}`);
+      if (fallbackRes.ok) {
+        const fbData = await fallbackRes.json();
+        const fallbackUrl = fbData.data?.[0]?.url || fbData.data?.url;
+        if (fallbackUrl) {
+          return res.status(200).json({ download_url: fallbackUrl });
         }
       }
     } catch (e) {}
   }
 
-  // 4. INSTANT FALLBACK: Invidious Stream Resolver
-  if (ytMatch && ytMatch[1]) {
-    try {
-      const invRes = await fetch(`https://inv.tux.pizza/api/v1/videos/${ytMatch[1]}`);
-      if (invRes.ok) {
-        const invData = await invRes.json();
-        const format = invData.formatStreams?.reverse()?.[0]?.url || invData.adaptiveFormats?.find(f => f.type?.startsWith("audio/"))?.url;
-        if (format) return res.status(200).json({ download_url: format });
-      }
-    } catch (e) {}
-  }
-
-  return res.status(500).json({ error: "Unable to process video. Verify the URL is public." });
+  return res.status(500).json({
+    error: "Could not extract media. Ensure the post/account is public and not age-restricted."
+  });
 }
