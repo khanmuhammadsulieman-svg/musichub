@@ -45,6 +45,7 @@
       font-size: 0.95rem;
       text-align: center;
       min-height: 24px;
+      word-break: break-word;
     }
     #status a {
       color: #38bdf8;
@@ -75,15 +76,15 @@
       }
 
       btn.disabled = true;
-      status.textContent = "Requesting download...";
+      status.textContent = "Starting download job...";
 
       try {
-        // Calls your Vercel serverless function (no CORS error, key kept private)
         const response = await fetch(`/api/download?query=${encodeURIComponent(inputUrl)}`);
         const data = await response.json();
 
-        if (data.download_url || data.url) {
-          const directUrl = data.download_url || data.url;
+        // 1. Check for immediate URL in the initial response
+        const directUrl = data.download_url || data.url || data.result?.url || data.result?.response;
+        if (directUrl) {
           status.innerHTML = `<a href="${directUrl}" target="_blank" download>Download Video</a>`;
           btn.disabled = false;
           return;
@@ -91,31 +92,54 @@
 
         const jobId = data.job_id || data.id;
         if (!jobId) {
-          status.textContent = data.message || "Failed to start download job.";
+          status.textContent = data.message || data.error || "Unable to start download job. Check your API key or link.";
           btn.disabled = false;
           return;
         }
 
-        status.textContent = "Processing video, please wait...";
+        status.textContent = `Job started (ID: ${jobId}). Waiting for processing...`;
+
+        // 2. Poll job endpoint until ready
+        let attempts = 0;
+        const maxAttempts = 30; // 30 * 2.5s = ~75 seconds timeout
 
         const pollInterval = setInterval(async () => {
+          attempts++;
           try {
             const jobRes = await fetch(`/api/download?jobId=${jobId}`);
             const job = await jobRes.json();
 
-            if (job.status === "CompletedJob" && (job.result?.response || job.result?.url)) {
+            // Extract the download URL from whichever key HuntAPI provides
+            const finalUrl =
+              job.result?.response ||
+              job.result?.url ||
+              job.download_url ||
+              job.file_url ||
+              job.url;
+
+            const jobStatus = (job.status || "").toLowerCase();
+
+            if (finalUrl || jobStatus === "completed" || jobStatus === "finished" || jobStatus === "completedjob") {
               clearInterval(pollInterval);
-              const finalUrl = job.result.response || job.result.url;
-              status.innerHTML = `<a href="${finalUrl}" target="_blank" download>Click Here to Download Your Video</a>`;
+              const downloadLink = finalUrl || job.result;
+              status.innerHTML = `<a href="${downloadLink}" target="_blank" download>Click Here to Download Your Video</a>`;
               btn.disabled = false;
-            } else if (job.status === "Error" || job.status === "BadRequest") {
+            } else if (jobStatus === "error" || jobStatus === "failed" || jobStatus === "badrequest") {
               clearInterval(pollInterval);
-              status.textContent = "Error processing video. Check if the link is public.";
+              status.textContent = job.error || job.message || "Failed to process video on server.";
+              btn.disabled = false;
+            } else {
+              status.textContent = `Processing video... (Status: ${job.status || "In progress"}, ${attempts * 2}s)`;
+            }
+
+            if (attempts >= maxAttempts) {
+              clearInterval(pollInterval);
+              status.textContent = "Video processing timed out. Please try again with a shorter video.";
               btn.disabled = false;
             }
           } catch (pollErr) {
             clearInterval(pollInterval);
-            status.textContent = "Error checking status.";
+            status.textContent = "Error reading job status from server.";
             btn.disabled = false;
           }
         }, 2500);
