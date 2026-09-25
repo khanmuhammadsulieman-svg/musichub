@@ -68,28 +68,33 @@ export default async function handler(req, res) {
     } catch (e) {}
   }
 
-  // ==========================================
-  // 4. INSTAGRAM & FACEBOOK (Dedicated RapidAPI Extraction)
+// ==========================================
+  // 4. INSTAGRAM & FACEBOOK
   // ==========================================
   const isMeta = cleanUrl.includes("instagram.com") || cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch");
   if (isMeta) {
-    // Primary RapidAPI resolver for IG / FB
     try {
-      const igRes = await fetch(`https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/index?url=${encodeURIComponent(cleanUrl)}`, {
-        headers: {
-          "x-rapidapi-host": "instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPIDAPI_KEY
+      const igRes = await fetch(
+        `https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/convert?url=${encodeURIComponent(cleanUrl)}`,
+        {
+          headers: {
+            "x-rapidapi-host": "instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com",
+            "x-rapidapi-key": process.env.RAPIDAPI_KEY,
+            "Content-Type": "application/json"
+          }
         }
-      });
+      );
 
       if (igRes.ok) {
         const metaData = await igRes.json();
+        // Extract media URL from the convert endpoint response
         const mediaUrl =
-          metaData.media ||
+          metaData.url?.[0]?.url ||
           metaData.url ||
+          metaData.media ||
           metaData.download_url ||
           metaData.result?.[0]?.url ||
-          metaData[0]?.url;
+          (Array.isArray(metaData) ? metaData[0]?.url : null);
 
         if (mediaUrl) {
           return res.status(200).json({ download_url: mediaUrl });
@@ -97,7 +102,7 @@ export default async function handler(req, res) {
       }
     } catch (e) {}
 
-    // Free Open Fallback for Instagram & Facebook
+    // Backup free scraper
     try {
       const fallbackRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanUrl)}`);
       if (fallbackRes.ok) {
