@@ -46,18 +46,20 @@ export default async function handler(req, res) {
   }
 
   // ==========================================
-  // 3. YOUTUBE (Via RapidAPI YTStream)
+  // 3. YOUTUBE (Via RapidAPI + Invidious Fallback)
   // ==========================================
   const ytMatch = cleanUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|v\/|shorts\/))([\w-]{11})/);
   if (ytMatch && ytMatch[1]) {
+    const videoId = ytMatch[1];
+    
+    // Attempt A: RapidAPI YTStream
     try {
-      const videoId = ytMatch[1];
       const ytRes = await fetch(`https://ytstream-download-youtube-videos.p.rapidapi.com/dl?id=${videoId}`, {
         headers: {
           "x-rapidapi-host": "ytstream-download-youtube-videos.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPIDAPI_KEY
+          "x-rapidapi-key": process.env.RAPIDAPI_KEY || ""
         },
-        signal: AbortSignal.timeout(7000)
+        signal: AbortSignal.timeout(5000)
       });
 
       if (ytRes.ok) {
@@ -69,6 +71,22 @@ export default async function handler(req, res) {
         }
         const directVideo = data.formats?.[0]?.url || data.adaptiveFormats?.[0]?.url;
         if (directVideo) return res.status(200).json({ download_url: directVideo });
+      }
+    } catch (e) {}
+
+    // Attempt B: Invidious API Fallback for YouTube
+    try {
+      const invRes = await fetch(`https://vid.puffyan.us/api/v1/videos/${videoId}`, {
+        signal: AbortSignal.timeout(5000)
+      });
+      if (invRes.ok) {
+        const invData = await invRes.json();
+        if (type === "audio_only") {
+          const audioStream = invData.adaptiveFormats?.filter(f => f.type?.includes("audio"))?.[0]?.url;
+          if (audioStream) return res.status(200).json({ download_url: audioStream });
+        }
+        const videoStream = invData.formatStreams?.[invData.formatStreams.length - 1]?.url;
+        if (videoStream) return res.status(200).json({ download_url: videoStream });
       }
     } catch (e) {}
   }
@@ -84,7 +102,7 @@ export default async function handler(req, res) {
     try {
       const igRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanMetaUrl)}`, {
         headers: { "User-Agent": "Mozilla/5.0" },
-        signal: AbortSignal.timeout(6000)
+        signal: AbortSignal.timeout(5000)
       });
       if (igRes.ok) {
         const fbData = await igRes.json();
@@ -105,7 +123,7 @@ export default async function handler(req, res) {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         },
         body: new URLSearchParams({ url: cleanMetaUrl, action: "post" }),
-        signal: AbortSignal.timeout(6000)
+        signal: AbortSignal.timeout(5000)
       });
 
       if (snapRes.ok) {
@@ -117,6 +135,34 @@ export default async function handler(req, res) {
       }
     } catch (e) {}
   }
+
+  // ==========================================
+  // 5. UNIVERSAL COBALT FALLBACK (Handles any remaining URLs)
+  // ==========================================
+  try {
+    const cobaltRes = await fetch("https://api.cobalt.tools", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify({
+        url: cleanUrl,
+        videoQuality: "720",
+        filenameStyle: "pretty"
+      }),
+      signal: AbortSignal.timeout(6000)
+    });
+
+    if (cobaltRes.ok) {
+      const cobaltData = await cobaltRes.json();
+      if (cobaltData.status === "redirect" || cobaltData.status === "tunnel") {
+        return res.status(200).json({ download_url: cobaltData.url });
+      } else if (cobaltData.status === "picker" && cobaltData.picker?.length > 0) {
+        return res.status(200).json({ download_url: cobaltData.picker[0].url });
+      }
+    }
+  } catch (e) {}
 
   return res.status(500).json({
     error: "Could not extract media. Ensure the post/account is public and not age-restricted."
