@@ -10,34 +10,22 @@ export default async function handler(req, res) {
   const cleanUrl = decodeURIComponent(query).trim();
 
   // ==========================================
-  // 1. INSTAGRAM & FACEBOOK (RapidAPI + Cobalt Fallback)
+  // 1. INSTAGRAM & FACEBOOK (Dedicated Scraper Pipeline)
   // ==========================================
   const isMeta = cleanUrl.includes("instagram.com") || cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch");
   if (isMeta) {
     const cleanMetaUrl = cleanUrl.split("?")[0].replace(/\/+$/, "");
 
-    // Engine A: RapidAPI Instagram Video Downloader
+    // Dedicated Instagram Engine A: Siputzx Public API
     if (cleanUrl.includes("instagram.com")) {
       try {
-        const formData = new URLSearchParams();
-        formData.append("url", cleanMetaUrl);
-
-        const igRes = await fetch("https://instagram-video-downloader13.p.rapidapi.com/video-downloader", {
-          method: "POST",
-          headers: {
-            "content-type": "application/x-www-form-urlencoded",
-            "x-rapidapi-host": "instagram-video-downloader13.p.rapidapi.com",
-            "x-rapidapi-key": process.env.RAPIDAPI_KEY || ""
-          },
-          body: formData,
-          signal: AbortSignal.timeout(6000)
+        const igRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanMetaUrl)}`, {
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+          signal: AbortSignal.timeout(5000)
         });
-
         if (igRes.ok) {
           const igData = await igRes.json();
-          // Fixed property mapping to target 'medias' array correctly
-          const directUrl = igData.medias?.[0]?.url || igData.data?.medias?.[0]?.url || igData.data?.url || igData.url || igData[0]?.url;
-          
+          const directUrl = igData.data?.[0]?.url || igData.data?.url || igData.url;
           if (directUrl && typeof directUrl === "string" && directUrl.startsWith("http")) {
             return res.status(200).json({ download_url: directUrl });
           }
@@ -45,35 +33,56 @@ export default async function handler(req, res) {
       } catch (e) {}
     }
 
-    // Engine B: Cobalt Fallback for Meta / Reels
+    // Dedicated Instagram Engine B: SaveFrom/SnapInsta Wrapper
     try {
-      const cobaltRes = await fetch("https://api.cobalt.tools", {
+      const snapRes = await fetch("https://snapinsta.app/action.php", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Referer": "https://snapinsta.app/",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         },
-        body: JSON.stringify({
-          url: cleanMetaUrl,
-          videoQuality: "720",
-          filenameStyle: "pretty"
-        }),
-        signal: AbortSignal.timeout(6000)
+        body: new URLSearchParams({ url: cleanMetaUrl, action: "post" }),
+        signal: AbortSignal.timeout(5000)
       });
 
-      if (cobaltRes.ok) {
-        const cobaltData = await cobaltRes.json();
-        if (cobaltData.status === "redirect" || cobaltData.status === "tunnel") {
-          return res.status(200).json({ download_url: cobaltData.url });
-        } else if (cobaltData.status === "picker" && cobaltData.picker?.length > 0) {
-          return res.status(200).json({ download_url: cobaltData.picker[0].url });
+      if (snapRes.ok) {
+        const html = await snapRes.text();
+        const match = html.match(/href="([^"]+token=[^"]+)"/i) || html.match(/href="(https:\/\/[^"]+download[^"]*)"/i);
+        if (match && match[1]) {
+          return res.status(200).json({ download_url: match[1].replace(/&amp;/g, "&") });
+        }
+      }
+    } catch (e) {}
+
+    // Dedicated Instagram Engine C: RapidAPI Fallback
+    try {
+      const formData = new URLSearchParams();
+      formData.append("url", cleanMetaUrl);
+
+      const rapRes = await fetch("https://instagram-video-downloader13.p.rapidapi.com/video-downloader", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          "x-rapidapi-host": "instagram-video-downloader13.p.rapidapi.com",
+          "x-rapidapi-key": process.env.RAPIDAPI_KEY || ""
+        },
+        body: formData,
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (rapRes.ok) {
+        const rapData = await rapRes.json();
+        const directUrl = rapData.medias?.[0]?.url || rapData.data?.medias?.[0]?.url;
+        if (directUrl && directUrl.startsWith("http")) {
+          return res.status(200).json({ download_url: directUrl });
         }
       }
     } catch (e) {}
   }
 
   // ==========================================
-  // 2. TIKTOK (TikWM + Cobalt Fallback)
+  // 2. TIKTOK (TikWM Engine)
   // ==========================================
   if (cleanUrl.includes("tiktok.com")) {
     try {
@@ -84,20 +93,6 @@ export default async function handler(req, res) {
       if (data.data?.play) {
         const streamUrl = type === "audio_only" ? data.data.music : data.data.play;
         return res.status(200).json({ download_url: streamUrl });
-      }
-    } catch (e) {}
-
-    try {
-      const cobRes = await fetch("https://api.cobalt.tools", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ url: cleanUrl }),
-        signal: AbortSignal.timeout(5000)
-      });
-      if (cobRes.ok) {
-        const cobData = await cobRes.json();
-        if (cobData.url) return res.status(200).json({ download_url: cobData.url });
-        if (cobData.picker?.[0]?.url) return res.status(200).json({ download_url: cobData.picker[0].url });
       }
     } catch (e) {}
   }
@@ -169,7 +164,7 @@ export default async function handler(req, res) {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify({ url: cleanUrl }),
-      signal: AbortSignal.timeout(6000)
+      signal: AbortSignal.timeout(5000)
     });
     if (generalRes.ok) {
       const genData = await generalRes.json();
