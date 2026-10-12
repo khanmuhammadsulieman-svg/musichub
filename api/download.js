@@ -10,22 +10,29 @@ export default async function handler(req, res) {
   const cleanUrl = decodeURIComponent(query).trim();
 
   // ==========================================
-  // 1. INSTAGRAM & FACEBOOK (Dedicated Scraper Pipeline)
+  // 1. INSTAGRAM & FACEBOOK (Apify + Fallback Pipeline)
   // ==========================================
   const isMeta = cleanUrl.includes("instagram.com") || cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch");
   if (isMeta) {
     const cleanMetaUrl = cleanUrl.split("?")[0].replace(/\/+$/, "");
 
-    // Dedicated Instagram Engine A: Siputzx Public API
-    if (cleanUrl.includes("instagram.com")) {
+    // Engine A: Apify Instagram Downloader Actor API
+    if (cleanUrl.includes("instagram.com") && process.env.APIFY_API_TOKEN) {
       try {
-        const igRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanMetaUrl)}`, {
-          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
-          signal: AbortSignal.timeout(5000)
-        });
-        if (igRes.ok) {
-          const igData = await igRes.json();
-          const directUrl = igData.data?.[0]?.url || igData.data?.url || igData.url;
+        // Trigger Apify actor sync-run (Replace 'apify/instagram-video-downloader' with your preferred actor ID)
+        const apifyRes = await fetch(
+          `https://api.apify.com/v2/acts/apify~instagram-video-downloader/run-sync-get-dataset-items?token=${process.env.APIFY_API_TOKEN}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ directUrls: [cleanMetaUrl] }),
+            signal: AbortSignal.timeout(8000)
+          }
+        );
+
+        if (apifyRes.ok) {
+          const items = await apifyRes.json();
+          const directUrl = items?.[0]?.videoUrl || items?.[0]?.url || items?.[0]?.downloadUrl;
           if (directUrl && typeof directUrl === "string" && directUrl.startsWith("http")) {
             return res.status(200).json({ download_url: directUrl });
           }
@@ -33,50 +40,33 @@ export default async function handler(req, res) {
       } catch (e) {}
     }
 
-    // Dedicated Instagram Engine B: SaveFrom/SnapInsta Wrapper
+    // Engine B: Siputzx Public API Fallback
     try {
-      const snapRes = await fetch("https://snapinsta.app/action.php", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Referer": "https://snapinsta.app/",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        },
-        body: new URLSearchParams({ url: cleanMetaUrl, action: "post" }),
+      const igRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanMetaUrl)}`, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
         signal: AbortSignal.timeout(5000)
       });
-
-      if (snapRes.ok) {
-        const html = await snapRes.text();
-        const match = html.match(/href="([^"]+token=[^"]+)"/i) || html.match(/href="(https:\/\/[^"]+download[^"]*)"/i);
-        if (match && match[1]) {
-          return res.status(200).json({ download_url: match[1].replace(/&amp;/g, "&") });
+      if (igRes.ok) {
+        const igData = await igRes.json();
+        const directUrl = igData.data?.[0]?.url || igData.data?.url || igData.url;
+        if (directUrl && typeof directUrl === "string" && directUrl.startsWith("http")) {
+          return res.status(200).json({ download_url: directUrl });
         }
       }
     } catch (e) {}
 
-    // Dedicated Instagram Engine C: RapidAPI Fallback
+    // Engine C: Cobalt Fallback for Meta
     try {
-      const formData = new URLSearchParams();
-      formData.append("url", cleanMetaUrl);
-
-      const rapRes = await fetch("https://instagram-video-downloader13.p.rapidapi.com/video-downloader", {
+      const cobaltRes = await fetch("https://api.cobalt.tools", {
         method: "POST",
-        headers: {
-          "content-type": "application/x-www-form-urlencoded",
-          "x-rapidapi-host": "instagram-video-downloader13.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPIDAPI_KEY || ""
-        },
-        body: formData,
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ url: cleanMetaUrl, videoQuality: "720" }),
         signal: AbortSignal.timeout(5000)
       });
-
-      if (rapRes.ok) {
-        const rapData = await rapRes.json();
-        const directUrl = rapData.medias?.[0]?.url || rapData.data?.medias?.[0]?.url;
-        if (directUrl && directUrl.startsWith("http")) {
-          return res.status(200).json({ download_url: directUrl });
-        }
+      if (cobaltRes.ok) {
+        const cobaltData = await cobaltRes.json();
+        if (cobaltData.url) return res.status(200).json({ download_url: cobaltData.url });
+        if (cobaltData.picker?.[0]?.url) return res.status(200).json({ download_url: cobaltData.picker[0].url });
       }
     } catch (e) {}
   }
