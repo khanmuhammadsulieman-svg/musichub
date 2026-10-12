@@ -6,9 +6,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const mediaStream = await fetch(decodeURIComponent(url), {
+    const decodedUrl = decodeURIComponent(url);
+    
+    const mediaStream = await fetch(decodedUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Range": req.headers.range || "" // Forward range requests if player requests chunks
       }
     });
 
@@ -16,13 +19,28 @@ export default async function handler(req, res) {
       return res.status(mediaStream.status).send("Failed to stream upstream media.");
     }
 
-    // Force browser to save file directly to disk
+    // Set headers for file download
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.setHeader("Content-Type", mediaStream.headers.get("content-type") || "video/mp4");
+    
+    const contentLength = mediaStream.headers.get("content-length");
+    if (contentLength) {
+      res.setHeader("Content-Length", contentLength);
+    }
 
-    const arrayBuffer = await mediaStream.arrayBuffer();
-    return res.send(Buffer.from(arrayBuffer));
+    // Stream the body directly to the response (prevents memory overflow on large files)
+    const reader = mediaStream.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      res.write(value);
+    }
+    
+    return res.end();
   } catch (err) {
-    return res.status(500).send("Error streaming media file.");
+    console.error("Streaming error:", err);
+    if (!res.headersSent) {
+      return res.status(500).send("Error streaming media file.");
+    }
   }
 }
