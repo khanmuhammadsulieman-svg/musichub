@@ -10,10 +10,9 @@ export default async function handler(req, res) {
   const cleanUrl = decodeURIComponent(query).trim();
 
   // ==========================================
-  // 1. TIKTOK (Enhanced Multi-Engine Fallback)
+  // 1. TIKTOK (TikWM + Cobalt Fallback)
   // ==========================================
   if (cleanUrl.includes("tiktok.com")) {
-    // Engine A: TikWM
     try {
       const tikRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(cleanUrl)}`, {
         signal: AbortSignal.timeout(5000)
@@ -25,7 +24,6 @@ export default async function handler(req, res) {
       }
     } catch (e) {}
 
-    // Engine B: Cobalt fallback specifically for TikTok if TikWM fails
     try {
       const cobRes = await fetch("https://api.cobalt.tools", {
         method: "POST",
@@ -101,13 +99,40 @@ export default async function handler(req, res) {
   }
 
   // ==========================================
-  // 4. INSTAGRAM & FACEBOOK (Multi-Engine Cascade)
+  // 4. INSTAGRAM & FACEBOOK (RapidAPI + Cobalt Fallback)
   // ==========================================
   const isMeta = cleanUrl.includes("instagram.com") || cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch");
   if (isMeta) {
     const cleanMetaUrl = cleanUrl.split("?")[0].replace(/\/+$/, "");
 
-    // Engine A: Cobalt API specifically forced for Meta (Most reliable public bypass)
+    // Engine A: RapidAPI Instagram Video Downloader
+    if (cleanUrl.includes("instagram.com")) {
+      try {
+        const formData = new URLSearchParams();
+        formData.append("url", cleanMetaUrl);
+
+        const igRes = await fetch("https://instagram-video-downloader13.p.rapidapi.com/video-downloader", {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            "x-rapidapi-host": "instagram-video-downloader13.p.rapidapi.com",
+            "x-rapidapi-key": process.env.RAPIDAPI_KEY || ""
+          },
+          body: formData,
+          signal: AbortSignal.timeout(6000)
+        });
+
+        if (igRes.ok) {
+          const igData = await igRes.json();
+          const directUrl = igData.data?.url || igData.url || igData.download_url || igData[0]?.url;
+          if (directUrl && typeof directUrl === "string" && directUrl.startsWith("http")) {
+            return res.status(200).json({ download_url: directUrl });
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Engine B: Cobalt Fallback for Meta / Facebook / Reels
     try {
       const cobaltRes = await fetch("https://api.cobalt.tools", {
         method: "POST",
@@ -129,43 +154,6 @@ export default async function handler(req, res) {
           return res.status(200).json({ download_url: cobaltData.url });
         } else if (cobaltData.status === "picker" && cobaltData.picker?.length > 0) {
           return res.status(200).json({ download_url: cobaltData.picker[0].url });
-        }
-      }
-    } catch (e) {}
-
-    // Engine B: Siputzx API Fallback
-    try {
-      const igRes = await fetch(`https://api.siputzx.my.id/api/d/ig?url=${encodeURIComponent(cleanMetaUrl)}`, {
-        headers: { "User-Agent": "Mozilla/5.0" },
-        signal: AbortSignal.timeout(5000)
-      });
-      if (igRes.ok) {
-        const fbData = await igRes.json();
-        const directUrl = fbData.data?.[0]?.url || fbData.data?.url;
-        if (directUrl && typeof directUrl === "string" && directUrl.startsWith("http")) {
-          return res.status(200).json({ download_url: directUrl });
-        }
-      }
-    } catch (e) {}
-
-    // Engine C: SaveFrom / SnapInsta alternative scraping pattern
-    try {
-      const snapRes = await fetch("https://snapinsta.app/action.php", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Referer": "https://snapinsta.app/",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        },
-        body: new URLSearchParams({ url: cleanMetaUrl, action: "post" }),
-        signal: AbortSignal.timeout(5000)
-      });
-
-      if (snapRes.ok) {
-        const html = await snapRes.text();
-        const match = html.match(/href="([^"]+token=[^"]+)"/i) || html.match(/href="(https:\/\/[^"]+download[^"]*)"/i);
-        if (match && match[1]) {
-          return res.status(200).json({ download_url: match[1].replace(/&amp;/g, "&") });
         }
       }
     } catch (e) {}
