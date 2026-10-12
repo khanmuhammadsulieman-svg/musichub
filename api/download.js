@@ -10,7 +10,70 @@ export default async function handler(req, res) {
   const cleanUrl = decodeURIComponent(query).trim();
 
   // ==========================================
-  // 1. TIKTOK (TikWM + Cobalt Fallback)
+  // 1. INSTAGRAM & FACEBOOK (RapidAPI + Cobalt Fallback)
+  // ==========================================
+  const isMeta = cleanUrl.includes("instagram.com") || cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch");
+  if (isMeta) {
+    const cleanMetaUrl = cleanUrl.split("?")[0].replace(/\/+$/, "");
+
+    // Engine A: RapidAPI Instagram Video Downloader
+    if (cleanUrl.includes("instagram.com")) {
+      try {
+        const formData = new URLSearchParams();
+        formData.append("url", cleanMetaUrl);
+
+        const igRes = await fetch("https://instagram-video-downloader13.p.rapidapi.com/video-downloader", {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            "x-rapidapi-host": "instagram-video-downloader13.p.rapidapi.com",
+            "x-rapidapi-key": process.env.RAPIDAPI_KEY || ""
+          },
+          body: formData,
+          signal: AbortSignal.timeout(6000)
+        });
+
+        if (igRes.ok) {
+          const igData = await igRes.json();
+          // Fixed property mapping to target 'medias' array correctly
+          const directUrl = igData.medias?.[0]?.url || igData.data?.medias?.[0]?.url || igData.data?.url || igData.url || igData[0]?.url;
+          
+          if (directUrl && typeof directUrl === "string" && directUrl.startsWith("http")) {
+            return res.status(200).json({ download_url: directUrl });
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Engine B: Cobalt Fallback for Meta / Reels
+    try {
+      const cobaltRes = await fetch("https://api.cobalt.tools", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({
+          url: cleanMetaUrl,
+          videoQuality: "720",
+          filenameStyle: "pretty"
+        }),
+        signal: AbortSignal.timeout(6000)
+      });
+
+      if (cobaltRes.ok) {
+        const cobaltData = await cobaltRes.json();
+        if (cobaltData.status === "redirect" || cobaltData.status === "tunnel") {
+          return res.status(200).json({ download_url: cobaltData.url });
+        } else if (cobaltData.status === "picker" && cobaltData.picker?.length > 0) {
+          return res.status(200).json({ download_url: cobaltData.picker[0].url });
+        }
+      }
+    } catch (e) {}
+  }
+
+  // ==========================================
+  // 2. TIKTOK (TikWM + Cobalt Fallback)
   // ==========================================
   if (cleanUrl.includes("tiktok.com")) {
     try {
@@ -40,7 +103,7 @@ export default async function handler(req, res) {
   }
 
   // ==========================================
-  // 2. TWITTER / X
+  // 3. TWITTER / X
   // ==========================================
   const twitterMatch = cleanUrl.match(/(?:twitter\.com|x\.com)\/(?:[^\/]+)\/status\/(\d+)/);
   if (twitterMatch && twitterMatch[1]) {
@@ -60,7 +123,7 @@ export default async function handler(req, res) {
   }
 
   // ==========================================
-  // 3. YOUTUBE
+  // 4. YOUTUBE
   // ==========================================
   const ytMatch = cleanUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|v\/|shorts\/))([\w-]{11})/);
   if (ytMatch && ytMatch[1]) {
@@ -94,67 +157,6 @@ export default async function handler(req, res) {
         const invData = await invRes.json();
         const videoStream = invData.formatStreams?.[invData.formatStreams.length - 1]?.url;
         if (videoStream) return res.status(200).json({ download_url: videoStream });
-      }
-    } catch (e) {}
-  }
-
-  // ==========================================
-  // 4. INSTAGRAM & FACEBOOK (RapidAPI + Cobalt Fallback)
-  // ==========================================
-  const isMeta = cleanUrl.includes("instagram.com") || cleanUrl.includes("facebook.com") || cleanUrl.includes("fb.watch");
-  if (isMeta) {
-    const cleanMetaUrl = cleanUrl.split("?")[0].replace(/\/+$/, "");
-
-    // Engine A: RapidAPI Instagram Video Downloader
-    if (cleanUrl.includes("instagram.com")) {
-      try {
-        const formData = new URLSearchParams();
-        formData.append("url", cleanMetaUrl);
-
-        const igRes = await fetch("https://instagram-video-downloader13.p.rapidapi.com/video-downloader", {
-          method: "POST",
-          headers: {
-            "content-type": "application/x-www-form-urlencoded",
-            "x-rapidapi-host": "instagram-video-downloader13.p.rapidapi.com",
-            "x-rapidapi-key": process.env.RAPIDAPI_KEY || ""
-          },
-          body: formData,
-          signal: AbortSignal.timeout(6000)
-        });
-
-        if (igRes.ok) {
-          const igData = await igRes.json();
-          const directUrl = igData.data?.url || igData.url || igData.download_url || igData[0]?.url;
-          if (directUrl && typeof directUrl === "string" && directUrl.startsWith("http")) {
-            return res.status(200).json({ download_url: directUrl });
-          }
-        }
-      } catch (e) {}
-    }
-
-    // Engine B: Cobalt Fallback for Meta / Facebook / Reels
-    try {
-      const cobaltRes = await fetch("https://api.cobalt.tools", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        body: JSON.stringify({
-          url: cleanMetaUrl,
-          videoQuality: "720",
-          filenameStyle: "pretty"
-        }),
-        signal: AbortSignal.timeout(6000)
-      });
-
-      if (cobaltRes.ok) {
-        const cobaltData = await cobaltRes.json();
-        if (cobaltData.status === "redirect" || cobaltData.status === "tunnel") {
-          return res.status(200).json({ download_url: cobaltData.url });
-        } else if (cobaltData.status === "picker" && cobaltData.picker?.length > 0) {
-          return res.status(200).json({ download_url: cobaltData.picker[0].url });
-        }
       }
     } catch (e) {}
   }
